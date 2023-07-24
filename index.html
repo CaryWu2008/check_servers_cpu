@@ -1,11 +1,8 @@
 <!doctype html>
 <html>
     <head>
-        <title>Server Resource Usage</title>
+        <title>Resource Used of the whole servers </title>
         <style>
-            body {
-                background-color: #BFEFFF;
-            }
             body::before,
             body::after {
                 content: 'LiSuan internal use only';
@@ -30,6 +27,7 @@
             table {
                 border-collapse: collapse;
                 margin: 0 auto;
+                width: 50%;
             }
             th, td {
                 border: 1px solid black;
@@ -64,27 +62,56 @@
               color: red;
             }
 
-        </style>
-        <script>
-            setTimeout(function() {
-                location.reload();
-            }, 40000);
+            .arrow {
+              margin-right: 5px;
+            }
 
-                function showDetails(td) {
+            .more-info {
+              font-size: smaller;
+              color: gray;
+            }
+
+            footer {
+              position: absolute;
+              bottom: 0;
+              width: 100%;
+              text-align: center;
+            }
+
+            @keyframes blink {
+              0% { opacity: 1; }
+              50% {
+                opacity: 1;
+               }
+              100% { opacity: 1; }
+            }
+
+             #externalContent h1 {
+               display: none;
+            }
+
+
+   </style>
+  <script>
+//            setTimeout(function() {
+//                location.reload();
+//            }, 20000);
+
+  function showDetails(td) {
     var serverName = td.textContent;
     // 获取服务器信息
     var info = {{ server_info|tojson }};
     var serverInfo = info[serverName];
     // 检查是否已经插入了行
     if (td.parentNode.rowIndex < td.parentNode.parentNode.rows.length - 1 && td.parentNode.parentNode.rows[td.parentNode.rowIndex + 1].classList.contains('info-row')) {
-              // 删除已经插入的行
+        // 删除已经插入的行
         for (var i = 0; i < serverInfo.length; i++) {
             td.parentNode.parentNode.deleteRow(td.parentNode.rowIndex + 1);
         }
     } else {
         // 在表格中插入若干行
         var table = document.querySelector('table');
-        var titles = ['CPU Model:', 'OS Version:', 'Uptime:', 'Logged-in Users:', 'Terminal Sessions:'];
+        var titles = ['CPU Model:', 'OS Version:', 'Uptime:', 'Logged-in Users:', 'Terminal opened:'];
         for (var i = 0; i < serverInfo.length; i++) {
             var newRow = table.insertRow(td.parentNode.rowIndex + i + 1);
             newRow.classList.add('info-row');
@@ -95,13 +122,76 @@
     }
 }
 
-       </script>
+
+   </script>
+    <!-- Add a new script section for AJAX -->
+   <script>
+    function updateTableData() {
+        // Make an AJAX request to the backend route '/get_data'
+        fetch('/get_data')
+            .then(response => response.json())
+            .then(data => {
+                // Update the table body content with the received data
+                var table = document.querySelector('table');
+                var tbody = table.querySelector('tbody');
+                tbody.innerHTML = ''; // Clear existing body rows
+
+                // Add the new rows based on the updated data
+                data.data.slice(1).forEach(row => {
+                    var newRow = document.createElement('tr');
+
+                    row.forEach((cell, index) => {
+                        var newCell = document.createElement('td');
+                        if (index === 0) {
+                            // Apply special styling for the first column
+                            newCell.className = (cell === 'failed') ? 'offline' : 'clickable';
+                            newCell.textContent = (cell === 'failed') ? 'n/a' : cell;
+                            if (cell !== 'failed') {
+                                newCell.onclick = function() {
+                                    showDetails(this);
+                                };
+                            }
+                        } else if (index === 3) {
+                            // Apply color coding for the fourth column (CPU Usage)
+                            var cpuUsage = parseFloat(cell);
+                            if (cpuUsage > 90) {
+                                newCell.style.color = 'red';
+                            } else if (cpuUsage < 40) {
+                                newCell.style.color = 'green';
+                            } else {
+                                newCell.style.color = 'blue';
+                            }
+                            newCell.textContent = cell + '%';
+                        } else {
+                            newCell.textContent = cell;
+                        }
+
+                        newRow.appendChild(newCell);
+                    });
+
+                    tbody.appendChild(newRow);
+                });
+            })
+            .catch(error => console.error('Error fetching data:', error));
+    }
+
+    // Call updateTableData initially to populate the table on page load
+    updateTableData();
+
+    // Refresh the table data every 10 seconds
+    setInterval(updateTableData, 10000);
+
+
+</script>
+
     </head>
     <body>
         <div class="container">
             <h1 style="color: blue; text-align: center;">Resource usage of Lisuan Linux servers</h1>
-            <h3>Last updated: {{ data[0] }}<span id="time"></span></h3>
+
+         <p><b>The below servers are listed in descending order according to their CPU usage values, and the data is updated every minute. If you need to use more CPU resources, you can prioritize the servers at the bottom. If you have any questions, you can find me (carywu) through teams, or by email at <a href="mailto:carywu@example.com">carywu@example.com</a> </b></p>
             <table>
+            <thead> <!-- Add thead element here -->
                 <tr>
                     <th>Server</th>
                     <th>CPU Cores</th>
@@ -109,51 +199,45 @@
                     <th>CPU Usage</th>
                     <th>Memory Usage</th>
                 </tr>
+            </thead>
+            <tbody> <!-- tbody element to be updated dynamically -->
                 {% for row in data[1:] %}
-    <tr>
-        {% for cell in row %}
-            {% if loop.index == 1 %}
-                {% if row[1] == 'failed' %}
-                    <td class="offline">{{ cell }} (offline)</td>
-                {% else %}
-                    <td class="clickable" onclick="showDetails(this)">{{ cell }}</td>
-                {% endif %}
-            {% elif row[1] == 'failed' %}
-                <td class="failed">n/a</td>
-            {% elif loop.index == 4 %}
-                {% if cell|float > 90 %}
-                    <td style="color:red;">{{ cell }}%</td>
-                {% elif cell|float < 40 %}
-                    <td style="color:green;">{{ cell }}%</td>
-                {% else %}
-                    <td style="color:blue;">{{ cell }}%</td>
-                {% endif %}
-            {% else %}
-                <td>{{ cell }}</td>
-            {% endif %}
-        {% endfor %}
-    </tr>
-{% endfor %}
-
-                           </table>
-            <div style="height: 50px;"></div>
-            <hr>
-         <p><b>The above servers are listed in descending order according to their CPU usage values, and the data is updated every minute. If you need to use more CPU resources, you can prioritize the servers at the bottom. If you have any questions, you can find me (carywu) through teams, or by email at <a href="mailto:carywu@lisuantech.com">carywu@lisuantech.com</a> </b></p>
-         <p><b>以上服务器是根据CPU Usage的值从高到低一次排列，数据每分钟更新一次，如果你需要使用比较多的CPU资源，可以优先选择底部的服务器主机。如有问题，可以通过teams找我(carywu), 或者通过邮件方式<a href="mailto:carywu@lisuantech.com">carywu@lisuantech.com</a>。</b></p>
-         <p style="text-align: center;" >仅供内网使用 | For internal use only</p>
+                <tr>
+                    {% for cell in row %}
+                        {% if loop.index == 1 %}
+                            {% if row[1] == 'failed' %}
+                                <td class="offline">{{ cell }} (offline)</td>
+                            {% else %}
+                                <td class="clickable" onclick="showDetails(this)">{{ cell }}</td>
+                            {% endif %}
+                        {% elif row[1] == 'failed' %}
+                            <td class="failed">n/a</td>
+                        {% elif loop.index == 4 %}
+                            {% if cell|float > 90 %}
+                                <td style="color:red;">{{ cell }}%</td>
+                            {% elif cell|float < 40 %}
+                                <td style="color:green;">{{ cell }}%</td>
+                            {% else %}
+                                <td style="color:blue;">{{ cell }}%</td>
+                            {% endif %}
+                        {% else %}
+                            <td>{{ cell }}</td>
+                        {% endif %}
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
         </div>
+        <div id="externalContent"></div>
+        <!--    <object data="https://disk.eda.sh" width="100%" height="500px"></object> -->
 
-        <!-- 添加JavaScript代码 -->
-        <script type="text/javascript">
-            function updateTime() {
-                var now = new Date();
-                var time = "Current Time: " + now.toLocaleTimeString();
-                document.getElementById("time").innerHTML = time;
-            }
-            setInterval(updateTime, 1000);
-        </script>
-        </div>
+        </body>
 
 
-    </body>
+<footer>
+    <hr>
+    <p style="color: gray; text-align: center;">砺算科技 | 仅限内网使用</p>
+</footer>
+
 </html>
